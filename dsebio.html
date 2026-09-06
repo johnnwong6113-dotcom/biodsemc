@@ -36,6 +36,9 @@
     .nav-btn:hover:not(:disabled){ background:#e2e8f0; border-color:#94a3b8; color:#334155; }
     .nav-btn:active:not(:disabled){ transform:translateY(1px); background:#cbd5e1; }
     .nav-btn:disabled{ opacity:0.5; cursor:not-allowed; }
+    .next-btn{ background:linear-gradient(135deg,#059669,#10b981); color:#ffffff; border:none; border-radius:10px; padding:12px 20px; font-weight:700; font-size:15px; cursor:pointer; transition:filter .2s, transform .04s; }
+    .next-btn:hover{ filter:brightness(1.05); }
+    .next-btn:active{ transform:translateY(1px); }
     .current-code{ margin-top:12px; margin-bottom:8px; text-align:center; font-size:18px; font-weight:700; color:#059669; padding:8px 16px; background:#f0fdf4; border:1px solid #86efac; border-radius:8px; }
     .sr-only{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
     .skip-link{ position:absolute; left:-9999px; top:auto; width:1px; height:1px; overflow:hidden; }
@@ -59,7 +62,7 @@
         </header>
 
         <div class="card section">
-            <div style="line-height:1.7; color:#334155;">請輸入老師派發的 5 位數字密碼，解鎖並查閱詳細題解。</div>
+            <div style="line-height:1.7; color:#334155;">請輸入老師派發的 8 位數字密碼，解鎖並查閱詳細題解。</div>
         </div>
 
         <div class="card section">
@@ -83,11 +86,11 @@
         <main id="main" role="main">
             <div class="card">
                 <div class="row">
-                    <label for="codeInput" class="sr-only">5 位數字密碼輸入框</label>
-                    <input id="codeInput" class="input" type="text" inputmode="numeric" placeholder="例如：38320" aria-describedby="codeHelp" />
+                    <label for="codeInput" class="sr-only">8 位數字密碼輸入框</label>
+                    <input id="codeInput" class="input" type="text" inputmode="numeric" maxlength="8" placeholder="例如：41000101" aria-describedby="codeHelp" />
                     <button id="lookupBtn" class="btn" aria-label="解鎖題解">解鎖題解</button>
                 </div>
-                <div id="codeHelp" class="sr-only">請輸入老師派發的 5 位數字密碼。按 Enter 或按下解鎖題解。</div>
+                <div id="codeHelp" class="sr-only">請輸入老師派發的 8 位數字密碼。按 Enter 或按下解鎖題解。</div>
                 <div id="currentCode" class="current-code" style="display:none;" aria-live="polite">當前題目：<span id="currentCodeValue"></span></div>
                 <div id="result" class="result" style="display:none;" role="status" aria-live="polite" aria-atomic="true" tabindex="-1"></div>
                 <div class="status" id="loadStatus" role="status" aria-live="polite" aria-atomic="true">正在嘗試載入 answers.csv…</div>
@@ -195,6 +198,18 @@
             const cleaned = normalizeCell(stripWrappingQuotes(String(text || '')));
             // 忽略所有空白，但保持原始大小寫，提升比對寬容度
             return cleaned.replace(/\s+/g, '');
+        }
+
+        function incrementSequentialCode(code){
+            const raw = String(code || '');
+            if(!/^\d+$/.test(raw)) return null;
+            const width = raw.length;
+            try{
+                const next = (BigInt(raw) + 1n).toString();
+                return next.length >= width ? next : next.padStart(width, '0');
+            }catch(_err){
+                return null;
+            }
         }
 
         function parseCsv(text){
@@ -682,70 +697,18 @@
                     currentCodeEl.style.display = '';
                 }
                 
-                // 計算上一題和下一題
-                const prevCode = getAdjacentCode(code, 'prev');
-                const nextCode = getAdjacentCode(code, 'next');
-                const hasPrev = prevCode && codeToAnswer.has(prevCode);
-                const hasNext = nextCode && codeToAnswer.has(nextCode);
-                
-                // 計算上五題和下五題
-                const prev5Code = getAdjacentCode(code, 'prev', 5);
-                const next5Code = getAdjacentCode(code, 'next', 5);
-                const hasPrev5 = prev5Code && codeToAnswer.has(prev5Code);
-                const hasNext5 = next5Code && codeToAnswer.has(next5Code);
-                
-                // 獲取第一題和最後一題
-                const { first: firstCode, last: lastCode } = getFirstAndLastCode(code);
-                const hasFirst = firstCode && codeToAnswer.has(firstCode) && firstCode !== code;
-                const hasLast = lastCode && codeToAnswer.has(lastCode) && lastCode !== code;
-                
                 let html = `<div style="margin-bottom: 12px;"><strong>答案：</strong><br>${renderRich(answer).replace(/\n/g, '<br>')}</div>`;
                 
                 if(related.trim() !== ''){
                     html += `<div style=\"border-top: 1px solid #cbd5e1; padding-top: 12px;\"><strong>類近題目：</strong><br>${renderRich(related).replace(/\n/g, '<br>')}</div>`;
                 }
-                
-                // 添加導航按鈕
-                html += `<div class="nav-buttons" style="flex-wrap: wrap;">`;
-                
-                // 第一行：第一題、上五題、上一題、下一題、下五題、最後一題
-                if(hasFirst){
-                    html += `<button class="nav-btn" data-code="${escapeHtml(firstCode)}" aria-label="查詢第一題 ${firstCode}">⏮ 第一題</button>`;
-                } else {
-                    html += `<button class="nav-btn" disabled>⏮ 第一題</button>`;
+
+                const nextCode = incrementSequentialCode(code);
+                if(nextCode){
+                    html += `<div class="nav-buttons">`;
+                    html += `<button type="button" class="next-btn" id="nextQuestionBtn" data-next-code="${escapeHtml(nextCode)}" aria-label="下一題 ${nextCode}">下一題 (Next Question)</button>`;
+                    html += `</div>`;
                 }
-                
-                if(hasPrev5){
-                    html += `<button class="nav-btn" data-code="${escapeHtml(prev5Code)}" aria-label="查詢上五題 ${prev5Code}">← 上五題</button>`;
-                } else {
-                    html += `<button class="nav-btn" disabled>← 上五題</button>`;
-                }
-                
-                if(hasPrev){
-                    html += `<button class="nav-btn" data-code="${escapeHtml(prevCode)}" aria-label="查詢上一題 ${prevCode}">← 上一題</button>`;
-                } else {
-                    html += `<button class="nav-btn" disabled>← 上一題</button>`;
-                }
-                
-                if(hasNext){
-                    html += `<button class="nav-btn" data-code="${escapeHtml(nextCode)}" aria-label="查詢下一題 ${nextCode}">下一題 →</button>`;
-                } else {
-                    html += `<button class="nav-btn" disabled>下一題 →</button>`;
-                }
-                
-                if(hasNext5){
-                    html += `<button class="nav-btn" data-code="${escapeHtml(next5Code)}" aria-label="查詢下五題 ${next5Code}">下五題 →</button>`;
-                } else {
-                    html += `<button class="nav-btn" disabled>下五題 →</button>`;
-                }
-                
-                if(hasLast){
-                    html += `<button class="nav-btn" data-code="${escapeHtml(lastCode)}" aria-label="查詢最後一題 ${lastCode}">最後一題 ⏭</button>`;
-                } else {
-                    html += `<button class="nav-btn" disabled>最後一題 ⏭</button>`;
-                }
-                
-                html += `</div>`;
                 
                 resultEl.innerHTML = html;
                 resultEl.style.color = '#065f46';
@@ -754,16 +717,15 @@
                 resultEl.style.display = '';
                 resultEl.setAttribute('role', 'status');
                 
-                // 綁定導航按鈕事件
-                resultEl.querySelectorAll('.nav-btn:not(:disabled)').forEach(btn => {
-                    btn.addEventListener('click', function(){
-                        const targetCode = this.getAttribute('data-code');
-                        if(targetCode){
-                            codeInput.value = targetCode;
-                            lookup();
-                        }
+                const nextBtn = document.getElementById('nextQuestionBtn');
+                if(nextBtn){
+                    nextBtn.addEventListener('click', function(){
+                        const targetCode = this.getAttribute('data-next-code');
+                        if(!targetCode) return;
+                        codeInput.value = targetCode;
+                        lookup();
                     });
-                });
+                }
                 
                 // 將焦點帶到結果，方便讀屏器朗讀
                 resultEl.focus();
@@ -804,6 +766,10 @@
                 }
                 const prefix = e.target.getAttribute('data-prefix');
                 if(prefix){
+                    if(codeInput.value.length >= 8){
+                        if(announcer){ announcer.textContent = '密碼最多 8 位'; }
+                        return;
+                    }
                     codeInput.value += prefix;
                     codeInput.focus();
                     if(announcer){ announcer.textContent = `已加入 ${prefix}`; }

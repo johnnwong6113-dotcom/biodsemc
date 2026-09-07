@@ -31,12 +31,14 @@
     .keypad{ display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; max-width:320px; }
     .keypad .quick-btn{ padding:14px 12px; font-size:18px; font-weight:700; }
     .keypad .quick-btn.action{ font-size:13px; font-weight:600; }
-    .nav-buttons{ display:flex; gap:6px; margin-top:12px; justify-content:center; flex-wrap:wrap; }
+    .nav-buttons{ display:flex; gap:8px; margin-top:12px; justify-content:center; flex-wrap:nowrap; }
     .nav-btn{ background:#f1f5f9; border:1px solid #cbd5e1; color:#475569; padding:8px 12px; border-radius:8px; font-size:13px; cursor:pointer; transition:all .2s; white-space:nowrap; }
     .nav-btn:hover:not(:disabled){ background:#e2e8f0; border-color:#94a3b8; color:#334155; }
     .nav-btn:active:not(:disabled){ transform:translateY(1px); background:#cbd5e1; }
     .nav-btn:disabled{ opacity:0.5; cursor:not-allowed; }
-    .next-btn{ background:linear-gradient(135deg,#059669,#10b981); color:#ffffff; border:none; border-radius:10px; padding:12px 20px; font-weight:700; font-size:15px; cursor:pointer; transition:filter .2s, transform .04s; }
+    .next-btn{ flex:1; min-width:0; background:linear-gradient(135deg,#059669,#10b981); color:#ffffff; border:none; border-radius:10px; padding:12px 12px; font-weight:700; font-size:15px; cursor:pointer; transition:filter .2s, transform .04s; white-space:nowrap; }
+    .next-btn.prev{ background:linear-gradient(135deg,#475569,#64748b); }
+    .next-btn.skip{ background:linear-gradient(135deg,#0f766e,#14b8a6); }
     .next-btn:hover{ filter:brightness(1.05); }
     .next-btn:active{ transform:translateY(1px); }
     .current-code{ margin-top:12px; margin-bottom:8px; text-align:center; font-size:18px; font-weight:700; color:#059669; padding:8px 16px; background:#f0fdf4; border:1px solid #86efac; border-radius:8px; }
@@ -49,6 +51,7 @@
         .keypad .quick-btn.action{ font-size:12px; }
         .nav-btn{ padding:6px 10px; font-size:11px; }
         .nav-buttons{ gap:4px; }
+        .next-btn{ padding:10px 8px; font-size:13px; }
         .current-code{ font-size:16px; padding:6px 12px; }
     }
     </style>
@@ -200,16 +203,34 @@
             return cleaned.replace(/\s+/g, '');
         }
 
-        function incrementSequentialCode(code){
+        function offsetSequentialCode(code, delta){
             const raw = String(code || '');
             if(!/^\d+$/.test(raw)) return null;
             const width = raw.length;
             try{
-                const next = (BigInt(raw) + 1n).toString();
+                const nextVal = BigInt(raw) + BigInt(delta);
+                if(nextVal < 0n) return null;
+                const next = nextVal.toString();
                 return next.length >= width ? next : next.padStart(width, '0');
             }catch(_err){
                 return null;
             }
+        }
+
+        function hasAnswerForCode(code){
+            const key = normalizeKey(code);
+            return key !== '' && codeToAnswer.has(key);
+        }
+
+        function navigateByDelta(delta){
+            const currentCode = normalizeKey(codeInput.value);
+            const targetCode = offsetSequentialCode(currentCode, delta);
+            if(!targetCode || !hasAnswerForCode(targetCode)){
+                alert('找不到此題目');
+                return;
+            }
+            codeInput.value = targetCode;
+            lookup();
         }
 
         function parseCsv(text){
@@ -703,12 +724,11 @@
                     html += `<div style=\"border-top: 1px solid #cbd5e1; padding-top: 12px;\"><strong>類近題目：</strong><br>${renderRich(related).replace(/\n/g, '<br>')}</div>`;
                 }
 
-                const nextCode = incrementSequentialCode(code);
-                if(nextCode){
-                    html += `<div class="nav-buttons">`;
-                    html += `<button type="button" class="next-btn" id="nextQuestionBtn" data-next-code="${escapeHtml(nextCode)}" aria-label="下一題 ${nextCode}">下一題 (Next Question)</button>`;
-                    html += `</div>`;
-                }
+                html += `<div class="nav-buttons" role="group" aria-label="題目導航">`;
+                html += `<button type="button" class="next-btn prev" id="prevQuestionBtn" aria-label="上一題">上一題 (Previous)</button>`;
+                html += `<button type="button" class="next-btn" id="nextQuestionBtn" aria-label="下一題">下一題 (Next)</button>`;
+                html += `<button type="button" class="next-btn skip" id="skipFiveBtn" aria-label="下 5 題">下 5 題 (Skip 5)</button>`;
+                html += `</div>`;
                 
                 resultEl.innerHTML = html;
                 resultEl.style.color = '#065f46';
@@ -717,14 +737,17 @@
                 resultEl.style.display = '';
                 resultEl.setAttribute('role', 'status');
                 
+                const prevBtn = document.getElementById('prevQuestionBtn');
                 const nextBtn = document.getElementById('nextQuestionBtn');
+                const skipFiveBtn = document.getElementById('skipFiveBtn');
+                if(prevBtn){
+                    prevBtn.addEventListener('click', function(){ navigateByDelta(-1); });
+                }
                 if(nextBtn){
-                    nextBtn.addEventListener('click', function(){
-                        const targetCode = this.getAttribute('data-next-code');
-                        if(!targetCode) return;
-                        codeInput.value = targetCode;
-                        lookup();
-                    });
+                    nextBtn.addEventListener('click', function(){ navigateByDelta(1); });
+                }
+                if(skipFiveBtn){
+                    skipFiveBtn.addEventListener('click', function(){ navigateByDelta(5); });
                 }
                 
                 // 將焦點帶到結果，方便讀屏器朗讀
